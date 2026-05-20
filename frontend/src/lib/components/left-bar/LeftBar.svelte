@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mdiAlert, mdiCheckCircle, mdiCloseCircle, mdiDownload, mdiFolderOpen, mdiHelp, mdiHelpCircle, mdiLoading, mdiMonitor, mdiPencil, mdiPlusCircle, mdiServer, mdiServerNetwork, mdiTrashCan, mdiUpload, mdiWeb } from '@mdi/js';
+  import { mdiAlert, mdiCheckCircle, mdiCloseCircle, mdiDownload, mdiFolderOpen, mdiFolderPlus, mdiHelp, mdiHelpCircle, mdiLoading, mdiMonitor, mdiPencil, mdiPlusCircle, mdiServer, mdiServerNetwork, mdiTrashCan, mdiUpload, mdiWeb } from '@mdi/js';
   import _ from 'lodash';
   import { siDiscord, siGithub } from 'simple-icons/icons';
 
@@ -28,8 +28,8 @@
   } from '$lib/store/ficsitCLIStore';
   import { error, siteURL } from '$lib/store/generalStore';
   import { queueAutoStart } from '$lib/store/settingsStore';
-  import { OpenExternal } from '$wailsjs/go/app/app';
-  import { ExportCurrentProfile } from '$wailsjs/go/ficsitcli/ficsitCLI';
+  import { OpenDirectoryDialog, OpenExternal } from '$wailsjs/go/app/app';
+  import { AddLocalInstallation, ExportCurrentProfile, RemoveLocalInstallation } from '$wailsjs/go/ficsitcli/ficsitCLI';
   import { common, ficsitcli } from '$wailsjs/go/models';
   import { BrowserOpenURL } from '$wailsjs/runtime/runtime';
   
@@ -51,6 +51,48 @@
       // Maybe we should instead save a dirty state in the settings
       $hasPendingProfileChange = false;
     } catch(e) {
+      if (e instanceof Error) {
+        $error = e.message;
+      } else if (typeof e === 'string') {
+        $error = e;
+      } else {
+        $error = 'Unknown error';
+      }
+    }
+  }
+
+  let addCustomInstallInProgress = false;
+  async function addCustomInstall() {
+    if (addCustomInstallInProgress) {
+      return;
+    }
+    addCustomInstallInProgress = true;
+    try {
+      const picked = await OpenDirectoryDialog({
+        title: 'Select Satisfactory install folder (contains FactoryGame.exe)',
+        canCreateDirectories: false,
+      });
+      if (!picked) {
+        return;
+      }
+      await AddLocalInstallation(picked);
+    } catch (e) {
+      if (e instanceof Error) {
+        $error = e.message;
+      } else if (typeof e === 'string') {
+        $error = e;
+      } else {
+        $error = 'Unknown error';
+      }
+    } finally {
+      addCustomInstallInProgress = false;
+    }
+  }
+
+  async function removeCustomInstall(path: string) {
+    try {
+      await RemoveLocalInstallation(path);
+    } catch (e) {
       if (e instanceof Error) {
         $error = e.message;
       } else if (typeof e === 'string') {
@@ -204,6 +246,15 @@
             </span>
           </svelte:fragment>
           <svelte:fragment slot="itemTrail" let:item>
+            {#if $installsMetadata[item]?.info?.launcher === 'Custom'}
+              <button
+                class="!w-5 !h-5"
+                title="Remove custom install"
+                on:click|stopPropagation={() => removeCustomInstall(item)}
+              >
+                <SvgIcon class="!w-full !h-full text-error-700" icon={mdiTrashCan}/>
+              </button>
+            {/if}
             <Tooltip fixed popupId={installOptionPopupId(item)}>
               <div class="flex flex-col">
                 <span class="break-words">{item}</span>
@@ -240,6 +291,17 @@
             </button>
           </svelte:fragment>
         </Select>
+
+        <button
+          class="btn bg-surface-200-700-token px-4 h-8 text-sm w-full"
+          disabled={addCustomInstallInProgress}
+          on:click={() => addCustomInstall()}
+        >
+          <Marquee class="flex-auto text-start">
+            <T defaultValue="Add custom install..." keyName="left-bar.add-custom-install"/>
+          </Marquee>
+          <SvgIcon class="h-5 w-5 text-primary-600" icon={mdiFolderPlus} />
+        </button>
 
         <div class="flex w-full">
           <div class="btn-group bg-surface-200-700-token w-full text-xl">
